@@ -20,6 +20,9 @@ use cairo_vm::hint_processor::hint_processor_definition::{
 use cairo_vm::serde::deserialize_program::{
     ApTracking, FlowTrackingData, HintParams, ReferenceManager,
 };
+// When cairo-vm is built without default features (no_std), its APIs use a custom HashMap type
+// under cairo_vm::stdlib::collections. Use this alias when interacting with cairo-vm APIs.
+use cairo_vm::stdlib::collections as vm_collections;
 use cairo_vm::types::builtin_name::BuiltinName;
 use cairo_vm::types::exec_scope::ExecutionScopes;
 use cairo_vm::types::layout_name::LayoutName;
@@ -62,7 +65,7 @@ pub fn hint_to_hint_params(hint: &Hint) -> HintParams {
         accessible_scopes: vec![],
         flow_tracking_data: FlowTrackingData {
             ap_tracking: ApTracking::new(),
-            reference_ids: HashMap::new(),
+            reference_ids: vm_collections::HashMap::new(),
         },
     }
 }
@@ -422,7 +425,7 @@ impl HintProcessorLogic for CairoHintProcessor<'_> {
         vm: &mut VirtualMachine,
         exec_scopes: &mut ExecutionScopes,
         hint_data: &Box<dyn Any>,
-        _constants: &HashMap<String, Felt252>,
+    _constants: &vm_collections::HashMap<String, Felt252>,
     ) -> Result<(), HintError> {
         let hint = hint_data.downcast_ref::<Hint>().unwrap();
         let hint = match hint {
@@ -467,7 +470,7 @@ impl HintProcessorLogic for CairoHintProcessor<'_> {
         &self,
         hint_code: &str,
         _ap_tracking_data: &ApTracking,
-        _reference_ids: &HashMap<String, usize>,
+        _reference_ids: &vm_collections::HashMap<String, usize>,
         _references: &[HintReference],
     ) -> Result<Box<dyn Any>, VirtualMachineError> {
         Ok(Box::new(self.string_to_hint[hint_code].clone()))
@@ -2367,13 +2370,16 @@ pub fn build_cairo_runner(
     builtins: Vec<BuiltinName>,
     hints_dict: HashMap<usize, Vec<HintParams>>,
 ) -> Result<CairoRunner, Box<CairoRunError>> {
+    // Convert std HashMaps to cairo-vm stdlib HashMaps expected by Program::new.
+    let hints_dict_vm: vm_collections::HashMap<usize, Vec<HintParams>> =
+        hints_dict.into_iter().collect();
     let program = Program::new(
         builtins,
         data,
         Some(0),
-        hints_dict,
+        hints_dict_vm,
         ReferenceManager { references: Vec::new() },
-        HashMap::new(),
+        vm_collections::HashMap::new(),
         vec![],
         None,
     )
